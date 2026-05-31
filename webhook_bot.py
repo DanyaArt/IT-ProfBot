@@ -1,7 +1,6 @@
 from flask import Flask, request, jsonify
 import requests
 import json
-import os
 from config import Config
 from database.queries import Database
 
@@ -48,7 +47,7 @@ def show_results(chat_id, user_id):
     session = user_sessions.get(user_id)
     if not session:
         return
-    scores = {"code": 0, "data": 0, "design": 0, "security": 0, "devops": 0, "mobile": 0, "game": 0, "ai_ml": 0}
+    scores = {"code": 0, "data": 0, "design": 0, "security": 0}
     all_q = db.get_all_questions()
     q_ids = sorted(all_q.keys())
     for i, q_id in enumerate(q_ids, 1):
@@ -61,13 +60,13 @@ def show_results(chat_id, user_id):
                     if cat in scores:
                         scores[cat] += val
                     break
-    spec_map = {"code": "Программная инженерия", "data": "Data Science", "design": "UX/UI дизайн", "security": "Кибербезопасность", "devops": "DevOps инженерия", "mobile": "Мобильная разработка", "game": "Game Development", "ai_ml": "AI/ML инженерия"}
+    spec_map = {"code": "Программная инженерия", "data": "Data Science", "design": "UX/UI дизайн", "security": "Кибербезопасность"}
     max_cat = max(scores, key=scores.get) if max(scores.values()) > 0 else "code"
     result = f"🎉 Тест завершен!\n\n🎯 Специализация: {spec_map[max_cat]}\n\n📊 Результаты:\n• Программирование: {scores['code']}\n• Анализ данных: {scores['data']}\n• Дизайн: {scores['design']}\n• Безопасность: {scores['security']}"
     send_message(chat_id, result, get_main_keyboard())
     del user_sessions[user_id]
 
-# ЭТОТ ОБРАБОТЧИК И ОТСУТСТВОВАЛ!
+# ===== ГЛАВНЫЙ ОБРАБОТЧИК ВЕБХУКА =====
 @app.route(f"/webhook/{BOT_TOKEN}", methods=['POST'])
 def webhook():
     data = request.get_json()
