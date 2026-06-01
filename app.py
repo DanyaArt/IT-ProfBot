@@ -1,51 +1,41 @@
 from flask import Flask, request, jsonify
 import requests
-import json
-from config import Config
-from database.queries import Database
 
 app = Flask(__name__)
 
-BOT_TOKEN = Config.BOT_TOKEN
-API_URL = f"https://api.telegram.org/bot{BOT_TOKEN}"
-
-db = Database(Config.DB_URL)
-user_sessions = {}
+BOT_TOKEN = "8904132865:AAFSrkvUzj9OJ3xs3gH_UwbABIi0-mDYRVs"
 
 def send_message(chat_id, text, reply_markup=None):
-    url = f"{API_URL}/sendMessage"
+    url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
     payload = {"chat_id": chat_id, "text": text, "parse_mode": "HTML"}
     if reply_markup:
-        payload["reply_markup"] = json.dumps(reply_markup)
-    try:
-        requests.post(url, json=payload, timeout=30)
-    except Exception as e:
-        print(f"Ошибка: {e}")
+        payload["reply_markup"] = reply_markup
+    requests.post(url, json=payload)
 
 def get_main_keyboard():
-    return {"keyboard": [[{"text": "Начать тест"}], [{"text": "Помощь"}]], "resize_keyboard": True}
+    return {
+        "keyboard": [
+            [{"text": "Начать тест"}],
+            [{"text": "Помощь"}]
+        ],
+        "resize_keyboard": True
+    }
 
 @app.route(f'/webhook/{BOT_TOKEN}', methods=['POST'])
 def webhook():
     data = request.get_json()
-    if not data or 'message' not in data:
-        return jsonify({"ok": True})
-    
-    msg = data['message']
-    chat_id = msg['chat']['id']
-    user_id = msg['from']['id']
-    text = msg.get('text', '')
-    
-    print(f"📨 {user_id}: {text}")
-    
-    if text == '/start':
-        send_message(chat_id, "🎓 Добро пожаловать в IT-профориентатор!\n\nНажмите 'Начать тест'", get_main_keyboard())
-    elif text == 'Начать тест':
-        send_message(chat_id, "✅ Тест начат! (Полная версия с 30 вопросами будет добавлена позже)")
-    elif text == 'Помощь':
-        send_message(chat_id, "Нажмите 'Начать тест' для начала тестирования", get_main_keyboard())
-    else:
-        send_message(chat_id, "Нажмите 'Начать тест' для начала", get_main_keyboard())
+    if data and 'message' in data:
+        chat_id = data['message']['chat']['id']
+        text = data['message'].get('text', '')
+        
+        if text == '/start':
+            send_message(chat_id, "🎓 Добро пожаловать!\n\nНажмите 'Начать тест'", get_main_keyboard())
+        elif text == 'Начать тест':
+            send_message(chat_id, "✅ Тест начат! Отвечайте на вопросы.")
+        elif text == 'Помощь':
+            send_message(chat_id, "Нажмите 'Начать тест' для начала")
+        else:
+            send_message(chat_id, f"Вы ответили: {text}\n\nПродолжайте тест!")
     
     return jsonify({"ok": True})
 
