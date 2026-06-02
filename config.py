@@ -2,7 +2,7 @@
 
 class Config:
 	# Telegram bot token
-	BOT_TOKEN = "8169709719:AAHrr2koPWiqGwOCD_fjp0TgnpgIbbx7maM"
+	BOT_TOKEN = "8904132865:AAFSrkvUzj9OJ3xs3gH_UwbABIi0-mDYRVs"
 
 	# Admin user IDs
 	ADMIN_IDS = {6589814866, 1215743664}
