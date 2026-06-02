@@ -1,96 +1,128 @@
 from flask import Flask, request, jsonify
 import requests
-import json
-from config import Config
-from database.queries import Database
 
 app = Flask(__name__)
 
-BOT_TOKEN = Config.BOT_TOKEN
-API_URL = f"https://api.telegram.org/bot{BOT_TOKEN}"
+BOT_TOKEN = "8904132865:AAFSrkvUzj9OJ3xs3gH_UwbABIi0-mDYRVs"
 
-db = Database(Config.DB_URL)
+# Хранилище ответов пользователей
 user_sessions = {}
 
+# Вопросы: текст вопроса и варианты ответов с баллами
+QUESTIONS = [
+    {
+        "text": "Что вам больше нравится?",
+        "options": [
+            {"text": "Писать код", "score": 3},
+            {"text": "Анализировать данные", "score": 2},
+            {"text": "Рисовать дизайн", "score": 1},
+            {"text": "Настраивать безопасность", "score": 2}
+        ]
+    },
+    {
+        "text": "Как вы решаете проблемы?",
+        "options": [
+            {"text": "Логически и последовательно", "score": 3},
+            {"text": "Интуитивно и творчески", "score": 1},
+            {"text": "Исследуя данные", "score": 2},
+            {"text": "Ищу уязвимости", "score": 2}
+        ]
+    },
+    {
+        "text": "Что вас привлекает в IT?",
+        "options": [
+            {"text": "Создавать новые продукты", "score": 3},
+            {"text": "Понимать как работают системы", "score": 2},
+            {"text": "Делать интерфейсы красивыми", "score": 1},
+            {"text": "Защищать от взломов", "score": 2}
+        ]
+    },
+    {
+        "text": "Выберите стиль работы:",
+        "options": [
+            {"text": "Индивидуально и глубоко", "score": 2},
+            {"text": "В команде над проектом", "score": 3},
+            {"text": "Свободный график", "score": 1},
+            {"text": "Строгий регламент", "score": 2}
+        ]
+    },
+    {
+        "text": "Что важнее для вас?",
+        "options": [
+            {"text": "Функциональность", "score": 3},
+            {"text": "Безопасность", "score": 2},
+            {"text": "Внешний вид", "score": 1},
+            {"text": "Производительность", "score": 2}
+        ]
+    }
+]
+
+# Клавиатура с вариантами ответов
+def get_question_keyboard(options):
+    keyboard = [[{"text": opt["text"]}] for opt in options]
+    return {"keyboard": keyboard, "resize_keyboard": True, "one_time_keyboard": True}
+
+# Обычное меню
+def get_main_menu():
+    return {"keyboard": [[{"text": "Начать тест"}], [{"text": "Помощ�"}]], "resize_keyboard": True}
+
+# Отправить сообщение
 def send_message(chat_id, text, reply_markup=None):
-    url = f"{API_URL}/sendMessage"
+    url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
     payload = {"chat_id": chat_id, "text": text, "parse_mode": "HTML"}
     if reply_markup:
-        payload["reply_markup"] = json.dumps(reply_markup)
+        payload["reply_markup"] = reply_markup
     try:
         requests.post(url, json=payload, timeout=30)
     except Exception as e:
         print(f"Ошибка: {e}")
 
-def get_main_keyboard():
-    return {"keyboard": [[{"text": "Начать тест"}], [{"text": "Помощь"}]], "resize_keyboard": True}
-
-def get_question_keyboard(options):
-    keyboard = []
-    for opt in options:
-        text = opt['text'] if isinstance(opt, dict) else opt
-        keyboard.append([{"text": text}])
-    return {"keyboard": keyboard, "resize_keyboard": True}
-
+# Отправить вопрос
 def send_question(chat_id, user_id, q_num):
-    all_q = db.get_all_questions()
-    if not all_q:
-        send_message(chat_id, "❌ Вопросы не найдены", get_main_keyboard())
-        return
-    q_ids = sorted(all_q.keys())
-    if q_num > len(q_ids):
-        show_results(chat_id, user_id)
-        return
-    q_id = q_ids[q_num - 1]
-    q = all_q[q_id]
-    markup = get_question_keyboard(q['options'])
-    text = f"❓ Вопрос {q_num}/{len(q_ids)}\n\n{q['text']}"
-    send_message(chat_id, text, markup)
-
-def show_results(chat_id, user_id):
-    session = user_sessions.get(user_id)
-    if not session:
-        return
-    answers = session.get('answers', {})
-    scores = {"code": 0, "data": 0, "design": 0, "security": 0, "devops": 0, "mobile": 0, "game": 0, "ai_ml": 0}
-    all_q = db.get_all_questions()
-    q_ids = sorted(all_q.keys())
-    for i, q_id in enumerate(q_ids, 1):
-        if str(i) in answers:
-            val = answers[str(i)]
-            q = all_q[q_id]
-            for opt in q['options']:
-                if isinstance(opt, dict) and opt.get('value') == val:
-                    cat = opt.get('category', 'code')
-                    if cat in scores:
-                        scores[cat] += val
-                    break
-    total_score = sum(scores.values())
-    if total_score > 0:
-        percentages = {k: int((v / total_score) * 100) for k, v in scores.items()}
-    else:
-        percentages = {k: 0 for k in scores}
-    max_cat = max(scores, key=scores.get) if max(scores.values()) > 0 else "code"
-    spec_map = {"code": "Программная инженерия", "data": "Data Science", "design": "UX/UI дизайн", "security": "Кибербезопасность", "devops": "DevOps инженерия", "mobile": "Мобильная разработка", "game": "Game Development", "ai_ml": "AI/ML инженерия"}
-    specialization = spec_map.get(max_cat, "Программная инженерия")
-    result_text = f"""
+    if q_num > len(QUESTIONS):
+        # Тест закончен — показываем результат
+        scores = user_sessions[user_id]["scores"]
+        
+        # Подсчёт итогов
+        total_score = sum(scores)
+        if total_score == 0:
+            percentages = {"code": 0, "data": 0, "design": 0, "security": 0}
+        else:
+            percentages = {
+                "code": int((scores[0] / total_score) * 100),
+                "data": int((scores[1] / total_score) * 100),
+                "design": int((scores[2] / total_score) * 100),
+                "security": int((scores[3] / total_score) * 100)
+            }
+        
+        # Определяем специализацию
+        max_index = scores.index(max(scores))
+        specializations = ["Программная инженерия", "Data Science", "UX/UI дизайн", "Кибербезопасность"]
+        result = f"""
 🎉 <b>Тест завершен!</b>
 
 📊 <b>Ваши результаты:</b>
-• Программная инженерия: {percentages.get('code', 0)}%
-• Data Science: {percentages.get('data', 0)}%
-• UX/UI дизайн: {percentages.get('design', 0)}%
-• Кибербезопасность: {percentages.get('security', 0)}%
+• Программная инженерия: {percentages['code']}%
+• Data Science: {percentages['data']}%
+• UX/UI дизайн: {percentages['design']}%
+• Кибербезопасность: {percentages['security']}%
 
 🎯 <b>Рекомендуемая специализация:</b>
-<b>{specialization}</b>
+<b>{specializations[max_index]}</b>
 
 Нажмите /start для нового теста
 """
-    send_message(chat_id, result_text, get_main_keyboard())
-    if user_id in user_sessions:
+        send_message(chat_id, result, get_main_menu())
         del user_sessions[user_id]
+        return
+    
+    # Отправляем вопрос
+    q = QUESTIONS[q_num - 1]
+    text = f"❓ <b>Вопрос {q_num}/{len(QUESTIONS)}</b>\n\n{q['text']}"
+    markup = get_question_keyboard(q["options"])
+    send_message(chat_id, text, markup)
 
+# Обработчик вебхука
 @app.route(f'/webhook/{BOT_TOKEN}', methods=['POST'])
 def webhook():
     data = request.get_json()
@@ -104,50 +136,55 @@ def webhook():
     
     print(f"📨 {user_id}: {text}")
     
+    # Команда /start
     if text == '/start':
         if user_id in user_sessions:
             del user_sessions[user_id]
-        send_message(chat_id, "🎓 Добро пожаловать!\n\nНажмите 'Начать тест'", get_main_keyboard())
+        send_message(chat_id, "🎓 Добро пожаловать в IT-профориентатор!\n\nНажмите 'Начать тест'", get_main_menu())
         return jsonify({"ok": True})
     
+    # Кнопка "Начать тест"
     if text == 'Начать тест':
-        if user_id in user_sessions:
-            del user_sessions[user_id]
-        user_sessions[user_id] = {'current': 1, 'answers': {}}
+        user_sessions[user_id] = {"current": 1, "scores": [0, 0, 0, 0]}
         send_question(chat_id, user_id, 1)
         return jsonify({"ok": True})
     
+    # Кнопка "Помощь"
     if text == 'Помощь':
-        send_message(chat_id, "Нажмите 'Начать тест' для прохождения теста", get_main_keyboard())
+        send_message(chat_id, "Нажмите 'Начать тест' для прохождения теста\n\nВопросов: 5", get_main_menu())
         return jsonify({"ok": True})
     
+    # Если пользователь в процессе теста
     if user_id in user_sessions:
         session = user_sessions[user_id]
-        all_q = db.get_all_questions()
-        if not all_q:
-            return jsonify({"ok": True})
-        q_ids = sorted(all_q.keys())
-        current_q = session.get('current', 1)
-        if current_q <= len(q_ids):
-            q_id = q_ids[current_q - 1]
-            q = all_q[q_id]
-            valid = [opt['text'] if isinstance(opt, dict) else opt for opt in q['options']]
-            if text in valid:
-                for opt in q['options']:
-                    opt_text = opt['text'] if isinstance(opt, dict) else opt
-                    if opt_text == text:
-                        val = opt.get('value', 0) if isinstance(opt, dict) else 0
-                        session['answers'][str(current_q)] = val
+        current = session["current"]
+        
+        if current <= len(QUESTIONS):
+            q = QUESTIONS[current - 1]
+            # Проверяем, что ответ правильный
+            valid_answers = [opt["text"] for opt in q["options"]]
+            if text in valid_answers:
+                # Находим выбранный вариант и добавляем баллы
+                for opt in q["options"]:
+                    if opt["text"] == text:
+                        # code, data, design, security
+                        if text in ["Писать код", "Логически и последовательно", "Создавать новые продукты", "Индивидуально и глубоко", "Функциональность"]:
+                            session["scores"][0] += opt["score"]
+                        elif text in ["Анализировать данные", "Исследуя данные", "Понимать как работают системы", "Производительность"]:
+                            session["scores"][1] += opt["score"]
+                        elif text in ["Рисовать дизайн", "Интуитивно и творчески", "Делать интерфейсы красивыми", "Внешний вид"]:
+                            session["scores"][2] += opt["score"]
+                        else:
+                            session["scores"][3] += opt["score"]
                         break
-                session['current'] = current_q + 1
-                send_question(chat_id, user_id, session['current'])
+                session["current"] += 1
+                send_question(chat_id, user_id, session["current"])
             else:
-                send_question(chat_id, user_id, current_q)
-        else:
-            show_results(chat_id, user_id)
+                send_message(chat_id, "❌ Пожалуйста, выберите вариант из кнопок")
         return jsonify({"ok": True})
     
-    send_message(chat_id, "Нажмите 'Начать тест' для начала", get_main_keyboard())
+    # Если ничего не подошло
+    send_message(chat_id, "Нажмите 'Начать тест' для начала", get_main_menu())
     return jsonify({"ok": True})
 
 @app.route('/')
