@@ -3,3 +3,7 @@ requests==2.31.0
 SQLAlchemy==2.0.45
 gunicorn==21.2.0
 pyTelegramBotAPI==4.22.1
+Flask==2.3.3
+requests==2.31.0
+SQLAlchemy==2.0.45
+gunicorn==21.2.0
